@@ -1,15 +1,16 @@
 #cloud-config
 
 hostname: ubuntu
+ssh_pwauth: false
 
 users:
   - default
   - name: pi
     gecos: Raspberry Pi admin
-    primary_group: pi
     groups: users, admin
+    shell: /bin/bash
     ssh_import_id:
       - gh:yerzhan0
-    passwd: $6$1uv3s/hmYKgdh2RE$3jNwTdfs3NEu9xBeoHAPF2qH.7fWWqFUBYF0zGzjAOlQ21qsHu/1.HqQOnz9JaeoKWYdSb0c4DoVrF.nxmwc71
+    passwd: $6$xyz$lrzkz89JCrvzOPr56aXfFFqGZpBReOx5ndDu9m5CwVFWjZsEIhvVm.I5B4zMxJdcdTyAvncwjKT.dWcD/ZHIo.
     sudo:
       - ALL=(ALL) NOPASSWD:ALL
