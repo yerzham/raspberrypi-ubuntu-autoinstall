@@ -62,7 +62,7 @@ function die() {
 
 usage() {
         cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-a] [-e] [-u user-data-file] [-m meta-data-file] [-k] [-c] [-r] [-s source-iso-file] [-d destination-iso-file]
+Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-a] [-e] [-u user-data-file] [-m meta-data-file] [-k] [-c] [-r] [-s source-image-file] [-d destination-image-file]
 
 💁 This script will create fully-automated Ubuntu 20.04 Focal Fossa installation media.
 
@@ -70,26 +70,26 @@ Available options:
 
 -h, --help              Print this help and exit
 -v, --verbose           Print script debug info
--a, --all-in-one        Bake user-data and meta-data into the generated ISO. By default you will
+-a, --all-in-one        Bake user-data and meta-data into the generated image. By default you will
                         need to boot systems with a CIDATA volume attached containing your
                         autoinstall user-data and meta-data files.
                         For more information see: https://ubuntu.com/server/docs/install/autoinstall-quickstart
--e, --use-hwe-kernel    Force the generated ISO to boot using the hardware enablement (HWE) kernel. Not supported
-                        by early Ubuntu 20.04 release ISOs.
+-e, --use-hwe-kernel    Force the generated image to boot using the hardware enablement (HWE) kernel. Not supported
+                        by early Ubuntu 20.04 release images.
 -u, --user-data         Path to user-data file. Required if using -a
 -m, --meta-data         Path to meta-data file. Will be an empty file if not specified and using -a
--k, --no-verify         Disable GPG verification of the source ISO file. By default SHA256SUMS-$today and
+-k, --no-verify         Disable GPG verification of the source image file. By default SHA256SUMS-$today and
                         SHA256SUMS-$today.gpg in ${script_dir} will be used to verify the authenticity and integrity
-                        of the source ISO file. If they are not present the latest daily SHA256SUMS will be
+                        of the source image file. If they are not present the latest daily SHA256SUMS will be
                         downloaded and saved in ${script_dir}. The Ubuntu signing key will be downloaded and
                         saved in a new keyring in ${script_dir}
 -c, --no-md5            Disable MD5 checksum on boot
--r, --use-release-iso   Use the current release ISO instead of the daily ISO. The file will be used if it already
+-r, --use-release-image   Use the current release image instead of the daily image. The file will be used if it already
                         exists.
--s, --source            Source ISO file. By default the latest daily ISO for Ubuntu 20.04 will be downloaded
-                        and saved as ${script_dir}/ubuntu-original-$today.iso
+-s, --source            Source image file. By default the latest daily image for Ubuntu 20.04 will be downloaded
+                        and saved as ${script_dir}/ubuntu-original-$today.image
                         That file will be used by default if it already exists.
--d, --destination       Destination ISO file. By default ${script_dir}/ubuntu-autoinstall-$today.iso will be
+-d, --destination       Destination image file. By default ${script_dir}/ubuntu-autoinstall-$today.image will be
                         created, overwriting any existing file.
 EOF
         exit
@@ -100,16 +100,15 @@ function parse_params() {
         user_data_file=''
         meta_data_file=''
         download_url="https://cdimage.ubuntu.com/ubuntu-server/jammy/daily-preinstalled/current/"
-        download_iso="jammy-preinstalled-server-arm64+raspi.img.xz"
-        original_iso="ubuntu-original-$today.img.xz"
-        source_iso="${script_dir}/${original_iso}"
-        destination_iso="${script_dir}/ubuntu-autoinstall-$today.iso"
+        download_img="jammy-preinstalled-server-arm64+raspi.img.xz"
+        original_img="ubuntu-original-$today.img.xz"
+        source_img="${script_dir}/${original_img}"
         sha_suffix="${today}"
         gpg_verify=1
         all_in_one=0
         use_hwe_kernel=0
         md5_checksum=1
-        use_release_iso=0
+        use_release_image=0
 
         while :; do
                 case "${1-}" in
@@ -119,17 +118,13 @@ function parse_params() {
                 -e | --use-hwe-kernel) use_hwe_kernel=1 ;;
                 -c | --no-md5) md5_checksum=0 ;;
                 -k | --no-verify) gpg_verify=0 ;;
-                -r | --use-release-iso) use_release_iso=1 ;;
+                -r | --use-release-image) use_release_image=1 ;;
                 -u | --user-data)
                         user_data_file="${2-}"
                         shift
                         ;;
                 -s | --source)
-                        source_iso="${2-}"
-                        shift
-                        ;;
-                -d | --destination)
-                        destination_iso="${2-}"
+                        source_img="${2-}"
                         shift
                         ;;
                 -m | --meta-data)
@@ -151,23 +146,22 @@ function parse_params() {
                 [[ -n "${meta_data_file}" ]] && [[ ! -f "$meta_data_file" ]] && die "💥 meta-data file could not be found."
         fi
 
-        if [ "${source_iso}" != "${script_dir}/${original_iso}" ]; then
-                [[ ! -f "${source_iso}" ]] && die "💥 Source ISO file could not be found."
+        if [ "${source_img}" != "${script_dir}/${original_img}" ]; then
+                [[ ! -f "${source_img}" ]] && die "💥 Source image file could not be found."
         fi
 
-        if [ "${use_release_iso}" -eq 1 ]; then
-                download_url="https://releases.ubuntu.com/focal"
+        if [ "${use_release_image}" -eq 1 ]; then
+                download_url="https://cdimage.ubuntu.com/releases/22.04/release/"
                 log "🔎 Checking for current release..."
-                download_iso=$(curl -sSL "${download_url}" | grep -oP 'ubuntu-20\.04\.\d*-live-server-amd64\.iso' | head -n 1)
-                original_iso="${download_iso}"
-                source_iso="${script_dir}/${download_iso}"
-                current_release=$(echo "${download_iso}" | cut -f2 -d-)
+                download_img=$(curl -sSL "${download_url}" | grep -oP 'ubuntu-22\.04\.{0,1}\d*-preinstalled-server-arm64\+raspi\.img\.xz' | head -n 1)
+                original_img="${download_img}"
+                source_img="${script_dir}/${download_img}"
+                current_release=$(echo "${download_img}" | cut -f2 -d-)
                 sha_suffix="${current_release}"
                 log "💿 Current release is ${current_release}"
         fi
 
-        destination_iso=$(realpath "${destination_iso}")
-        source_iso=$(realpath "${source_iso}")
+        source_img=$(realpath "${source_img}")
 
         return 0
 }
@@ -185,23 +179,21 @@ else
 fi
 
 log "🔎 Checking for required utilities..."
-# [[ ! -x "$(command -v xorriso)" ]] && die "💥 xorriso is not installed. On Ubuntu, install  the 'xorriso' package."
 [[ ! -x "$(command -v udisksctl)" ]] && die "💥 udisksctl is not installed. On Ubuntu, install  the 'udisks2' package."
 [[ ! -x "$(command -v sed)" ]] && die "💥 sed is not installed. On Ubuntu, install the 'sed' package."
 [[ ! -x "$(command -v curl)" ]] && die "💥 curl is not installed. On Ubuntu, install the 'curl' package."
 [[ ! -x "$(command -v gpg)" ]] && die "💥 gpg is not installed. On Ubuntu, install the 'gpg' package."
-# [[ ! -f "/usr/lib/ISOLINUX/isohdpfx.bin" ]] && die "💥 isolinux is not installed. On Ubuntu, install the 'isolinux' package."
 log "👍 All required utilities are installed."
 
-if [ ! -f "${source_iso}" ]; then
-        log "🌎 Downloading ISO image for Ubuntu 20.04 Focal Fossa..."
-        curl -NsSL "${download_url}/${download_iso}" -o "${source_iso}"
-        log "👍 Downloaded and saved to ${source_iso}"
+if [ ! -f "${source_img}" ]; then
+        log "🌎 Downloading image ${source_img}..."
+        curl -NsSL "${download_url}/${download_img}" -o "${source_img}"
+        log "👍 Downloaded and saved to ${source_img}"
 else
-        log "☑️ Using existing ${source_iso} file."
+        log "☑️ Using existing ${source_img} file."
         if [ ${gpg_verify} -eq 1 ]; then
-                if [ "${source_iso}" != "${script_dir}/${original_iso}" ]; then
-                        log "⚠️ Automatic GPG verification is enabled. If the source ISO file is not the latest daily or release image, verification will fail!"
+                if [ "${source_img}" != "${script_dir}/${original_img}" ]; then
+                        log "⚠️ Automatic GPG verification is enabled. If the source image file is not the latest daily or release image, verification will fail!"
                 fi
         fi
 fi
@@ -223,7 +215,7 @@ if [ ${gpg_verify} -eq 1 ]; then
                 log "☑️ Using existing Ubuntu signing key saved in ${script_dir}/${ubuntu_gpg_key_id}.keyring"
         fi
 
-        log "🔐 Verifying ${source_iso} integrity and authenticity..."
+        log "🔐 Verifying ${source_img} integrity and authenticity..."
         gpg -q --keyring "${script_dir}/${ubuntu_gpg_key_id}.keyring" --verify "${script_dir}/SHA256SUMS-${sha_suffix}.gpg" "${script_dir}/SHA256SUMS-${sha_suffix}" 2>/dev/null
         if [ $? -ne 0 ]; then
                 rm -f "${script_dir}/${ubuntu_gpg_key_id}.keyring~"
@@ -231,23 +223,23 @@ if [ ${gpg_verify} -eq 1 ]; then
         fi
 
         rm -f "${script_dir}/${ubuntu_gpg_key_id}.keyring~"
-        digest=$(sha256sum "${source_iso}" | cut -f1 -d ' ')
+        digest=$(sha256sum "${source_img}" | cut -f1 -d ' ')
         set +e
         grep -Fq "$digest" "${script_dir}/SHA256SUMS-${sha_suffix}"
         if [ $? -eq 0 ]; then
                 log "👍 Verification succeeded."
                 set -e
         else
-                die "👿 Verification of ISO digest failed."
+                die "👿 Verification of image digest failed."
         fi
 else
-        log "🤞 Skipping verification of source ISO."
+        log "🤞 Skipping verification of source image."
 fi
 
 
-log "🔧 Extracting ISO image..."
-unxz -f -k $source_iso
-loop=$(udisksctl loop-setup -f ${source_iso::-3} | grep -o '[^ ]\+$' | head --bytes -2)
+log "🔧 Extracting image..."
+unxz -f -k $source_img
+loop=$(udisksctl loop-setup -f ${source_img::-3} | grep -o '[^ ]\+$' | head --bytes -2)
 log "🔁 Created loop $loop"
 mount=$(udisksctl mount -b ${loop}p1 | grep -o '[^ ]\+$')
 log "👍 Extracted to $mount"
@@ -269,9 +261,10 @@ if [ ${all_in_one} -eq 1 ]; then
         log "👍 Added data and configured kernel command line."
 fi
 
-log "📦 Repackaging extracted files into an ISO image..."
+log "📦 Unmounting an image..."
 udisksctl unmount -b  "${loop}p1" &>/dev/null
 udisksctl loop-delete -b "$loop" &>/dev/null
+log "🔁 Deleted loop $loop"
 log "👍 Repackaged"
 
 die "✅ Completed." 0
