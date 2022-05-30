@@ -42,6 +42,13 @@ function cleanup() {
                 rm -rf "$tmpdir"
                 log "🚽 Deleted temporary working directory $tmpdir"
         fi
+        if [ ! -z "$loop" ]; then
+                log "📦 Unmounting an image..."
+                udisksctl unmount -b  "${loop}p1" &>/dev/null
+                udisksctl loop-delete -b "$loop" &>/dev/null
+                log "🔁 Deleted loop $loop"
+        fi
+        
 }
 
 trap cleanup SIGINT SIGTERM ERR EXIT
@@ -140,11 +147,9 @@ function parse_params() {
         log "👶 Starting up..."
 
         # check required params and arguments
-        if [ ${all_in_one} -ne 0 ]; then
-                [[ -z "${user_data_file}" ]] && die "💥 user-data file was not specified."
-                [[ ! -f "$user_data_file" ]] && die "💥 user-data file could not be found."
-                [[ -n "${meta_data_file}" ]] && [[ ! -f "$meta_data_file" ]] && die "💥 meta-data file could not be found."
-        fi
+        [[ -z "${user_data_file}" ]] && die "💥 user-data file was not specified."
+        [[ ! -f "$user_data_file" ]] && die "💥 user-data file could not be found."
+        [[ -n "${meta_data_file}" ]] && [[ ! -f "$meta_data_file" ]] && die "💥 meta-data file could not be found."
 
         if [ "${source_img}" != "${script_dir}/${original_img}" ]; then
                 [[ ! -f "${source_img}" ]] && die "💥 Source image file could not be found."
@@ -242,7 +247,8 @@ unxz -f -k $source_img
 loop=$(udisksctl loop-setup -f ${source_img::-3} | grep -o '[^ ]\+$' | head --bytes -2)
 log "🔁 Created loop $loop"
 mount=$(udisksctl mount -b ${loop}p1 | grep -o '[^ ]\+$')
-log "👍 Extracted to $mount"
+log "👍 Mounted system-boot to $mount"
+
 
 if [ ! -f "$mount/user-data" ] || [ ! -f "$mount/meta-data" ]; then
         udisksctl unmount -b  "${loop}p1"
@@ -250,21 +256,14 @@ if [ ! -f "$mount/user-data" ] || [ ! -f "$mount/meta-data" ]; then
         die "👿 Image first partition has no user-data or meta-data. Probably wrong partition or image."
 fi
 
-if [ ${all_in_one} -eq 1 ]; then
-        log "🧩 Adding user-data and meta-data files..."
-        rm "$mount/user-data"
-        cp "$user_data_file" "$mount/user-data"
-        if [ -n "${meta_data_file}" ]; then
-                rm "$mount/meta-data"
-                cp "$meta_data_file" "$tmpdir/meta-data"
-        fi
-        log "👍 Added data and configured kernel command line."
+log "🧩 Adding user-data and meta-data files..."
+rm "$mount/user-data"
+cp "$user_data_file" "$mount/user-data"
+if [ -n "${meta_data_file}" ]; then
+        rm "$mount/meta-data"
+        cp "$meta_data_file" "$tmpdir/meta-data"
 fi
+log "👍 Added cloud-config data."
 
-log "📦 Unmounting an image..."
-udisksctl unmount -b  "${loop}p1" &>/dev/null
-udisksctl loop-delete -b "$loop" &>/dev/null
-log "🔁 Deleted loop $loop"
-log "👍 Repackaged"
 
 die "✅ Completed." 0
