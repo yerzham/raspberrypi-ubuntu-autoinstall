@@ -246,7 +246,11 @@ log "🔧 Extracting image..."
 unxz -f -k $source_img
 loop=$(udisksctl loop-setup -f ${source_img::-3} | grep -o '[^ ]\+$' | head --bytes -2)
 log "🔁 Created loop $loop"
-mount=$(udisksctl mount -b ${loop}p1 | grep -o '[^ ]\+$')
+if lsblk | grep -oq '${loop}p1'; then
+        mount=$(lsblk | grep -o '${loop}p1.*' | grep -o '[^ ]\+$')
+else
+        mount=$(udisksctl mount -b ${loop}p1 | grep -o '[^ ]\+$')
+fi
 log "👍 Mounted system-boot to $mount"
 
 
